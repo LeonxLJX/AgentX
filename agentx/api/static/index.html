@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AgentX - Full-Stack AI Outsourcing Toolkit</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">AX</span>
+      <div>
+        <h1>AgentX</h1>
+        <p>Nine-module full-stack AI outsourcing toolkit</p>
+      </div>
+    </div>
+    <nav class="nav">
+      <a href="#m-text">Text</a>
+      <a href="#m-nlp">NLP</a>
+      <a href="#m-cal">Calibration</a>
+      <a href="#m-sched">Scheduling</a>
+      <a href="#m-tsp">TSP</a>
+      <a href="#m-hull">Convex Hull</a>
+      <a href="#m-col">Collision</a>
+      <a href="#m-etl">ETL</a>
+      <a href="#m-fin">Finance</a>
+    </nav>
+  </header>
+
+  <main class="grid">
+
+    <!-- 01 Text Classification -->
+    <section class="card" id="m-text">
+      <div class="card-head"><span class="badge">01</span><h2>Text Classification</h2></div>
+      <p class="desc">TF-IDF + LogisticRegression · multi-class · probability output</p>
+      <textarea id="text-input" rows="3">When will my package arrive?</textarea>
+      <div class="row">
+        <button class="btn" onclick="runText()">Classify</button>
+        <span class="hint">Built-in 4-intent support tickets: refund / logistics / account / tech</span>
+      </div>
+      <pre id="text-out" class="out"></pre>
+    </section>
+
+    <!-- 02 NLP Phase Detection -->
+    <section class="card" id="m-nlp">
+      <div class="card-head"><span class="badge">02</span><h2>NLP Phase Detection</h2></div>
+      <p class="desc">Sentiment · keywords · entity extraction · EN/ZH auto-detect</p>
+      <textarea id="nlp-input" rows="3">The delivery was extremely fast and the support team is very helpful, contact support@example.com if needed.</textarea>
+      <div class="row">
+        <button class="btn" onclick="runNlp()">Analyze</button>
+      </div>
+      <pre id="nlp-out" class="out"></pre>
+    </section>
+
+    <!-- 03 Probability Calibration -->
+    <section class="card" id="m-cal">
+      <div class="card-head"><span class="badge">03</span><h2>Probability Calibration</h2></div>
+      <p class="desc">Platt / Isotonic · Brier score · reliability diagram</p>
+      <div class="row">
+        <select id="cal-method">
+          <option value="isotonic">Isotonic</option>
+          <option value="sigmoid">Sigmoid (Platt)</option>
+        </select>
+        <button class="btn" onclick="runCalibrate()">Calibrate &amp; evaluate</button>
+      </div>
+      <pre id="cal-out" class="out"></pre>
+    </section>
+
+    <!-- 04 Scheduling -->
+    <section class="card" id="m-sched">
+      <div class="card-head"><span class="badge">04</span><h2>Job Scheduling</h2></div>
+      <p class="desc">WSPT priorities · DAG dependencies · parallel machines · Gantt</p>
+      <textarea id="sched-input" rows="5">A,3,5,,
+B,2,1,A,
+C,4,3,,
+D,1,2,B;C</textarea>
+      <div class="row">
+        <label>Machines <input type="number" id="sched-machines" value="2" min="1" max="8" /></label>
+        <button class="btn" onclick="runSchedule()">Schedule</button>
+        <span class="hint">Format: id,duration,priority,deps(; separated),weight</span>
+      </div>
+      <div id="sched-gantt" class="viz"></div>
+      <pre id="sched-out" class="out"></pre>
+    </section>
+
+    <!-- 05 Path Optimization (TSP) -->
+    <section class="card" id="m-tsp">
+      <div class="card-head"><span class="badge">05</span><h2>Path Optimization TSP</h2></div>
+      <p class="desc">Nearest-neighbour + 2-opt · delivery route planning</p>
+      <textarea id="tsp-input" rows="4">(0,0),(1,5),(4,3),(6,0),(3,6),(7,4),(2,7)</textarea>
+      <div class="row">
+        <button class="btn" onclick="runTsp()">Solve route</button>
+      </div>
+      <div id="tsp-viz" class="viz"></div>
+      <pre id="tsp-out" class="out"></pre>
+    </section>
+
+    <!-- 06 Convex Hull -->
+    <section class="card" id="m-hull">
+      <div class="card-head"><span class="badge">06</span><h2>Convex Hull</h2></div>
+      <p class="desc">Andrew monotone chain · area / perimeter</p>
+      <textarea id="hull-input" rows="4">(0,0),(1,1),(2,0),(1,-1),(0.5,0.5),(3,2),(2,3),(-1,1)</textarea>
+      <div class="row">
+        <button class="btn" onclick="runHull()">Compute hull</button>
+      </div>
+      <div id="hull-viz" class="viz"></div>
+      <pre id="hull-out" class="out"></pre>
+    </section>
+
+    <!-- 07 Collision Detection -->
+    <section class="card" id="m-col">
+      <div class="card-head"><span class="badge">07</span><h2>Collision Detection SAT</h2></div>
+      <p class="desc">Separating Axis Theorem · minimum translation vector</p>
+      <div class="row">
+        <button class="btn" onclick="runCollision()">Test</button>
+        <span class="hint">Fixed squares; slide B to see collision + MTV</span>
+      </div>
+      <div class="row">
+        <label>Polygon B offset x: <input type="range" id="col-offset" min="-6" max="8" value="0" step="0.5" oninput="runCollision()" /></label>
+      </div>
+      <div id="col-viz" class="viz"></div>
+      <pre id="col-out" class="out"></pre>
+    </section>
+
+    <!-- 08 ETL -->
+    <section class="card" id="m-etl">
+      <div class="card-head"><span class="badge">08</span><h2>Data Cleaning ETL</h2></div>
+      <p class="desc">Dedupe · missing fill · type inference · outlier capping</p>
+      <textarea id="etl-input" rows="6">[
+  {"name": "Alice", "age": 30, "city": "beijing "},
+  {"name": "Alice", "age": 30, "city": "beijing "},
+  {"name": "Bob", "age": null, "city": "shanghai"},
+  {"name": "carol", "age": 300, "city": "guangzhou"},
+  {"name": "David", "age": 28, "city": "shenzhen"}
+]</textarea>
+      <div class="row">
+        <button class="btn" onclick="runEtl()">Clean</button>
+      </div>
+      <pre id="etl-out" class="out"></pre>
+    </section>
+
+    <!-- 09 Finance -->
+    <section class="card" id="m-fin">
+      <div class="card-head"><span class="badge">09</span><h2>Financial Forecasting</h2></div>
+      <p class="desc">AR(p) / linear / ridge · backtest RMSE · technical factors</p>
+      <div class="row">
+        <select id="fin-model">
+          <option value="ar">AR autoregressive</option>
+          <option value="linear">Linear trend</option>
+          <option value="ridge">Ridge</option>
+          <option value="naive">Naive baseline</option>
+        </select>
+        <label>Horizon <input type="number" id="fin-horizon" value="5" min="1" max="30" /></label>
+        <button class="btn" onclick="runFinance()">Forecast</button>
+      </div>
+      <div id="fin-viz" class="viz"></div>
+      <pre id="fin-out" class="out"></pre>
+    </section>
+
+  </main>
+
+  <footer>
+    <p>AgentX v1.0.0 · MIT License · FastAPI + scikit-learn + NumPy/Pandas · interactive docs at <a href="/docs" target="_blank">/docs</a></p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

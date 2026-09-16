@@ -1,0 +1,10 @@
+# ============================================================================
+# AgentX - Optional dependencies (opt-in heavy features)
+#   - OCR support in the ETL engine (pytesseract + system Tesseract binary)
+#   - Advanced computer-vision ops in the Geometry module (OpenCV)
+# Install with:  pip install -r requirements-optional.txt
+# The core library works without them; feature detection is graceful.
+# ============================================================================
+
+pytesseract>=0.3.10
+opencv-python-headless>=4.9.0

@@ -1,0 +1,25 @@
+# ============================================================================
+# AgentX - Core runtime dependencies
+# Target: Python 3.10+
+# Install with:  pip install -r requirements.txt
+# ============================================================================
+
+# --- Scientific computing / data ---
+numpy>=1.26.0
+scipy>=1.11.0
+pandas>=2.1.0
+
+# --- Machine learning (TextClassifier, Calibrator, FinanceModels) ---
+scikit-learn>=1.4.0
+
+# --- Plotting (Calibrator reliability diagrams, finance charts) ---
+matplotlib>=3.8.0
+
+# --- Image processing (Geometry raster ops, ETL/OCR pipeline) ---
+Pillow>=10.2.0
+
+# --- Web API (REST API + frontend module) ---
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+pydantic>=2.6.0
+python-multipart>=0.0.9
