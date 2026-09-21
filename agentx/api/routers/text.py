@@ -14,12 +14,13 @@ Chinese ticket dataset on first use so the demo works with zero setup.
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from agentx.core import get_logger
+from agentx.core.exceptions import ValidationError
 from agentx.textclassifier import TextClassifier
 from agentx.textclassifier.dataset import load_ticket
 
@@ -44,6 +45,20 @@ class ClassifyRequest(BaseModel):
     texts: List[str] = Field(..., min_length=1, description="Documents to classify")
 
 
+class ClassifyResponse(BaseModel):
+    """Per-document classification result."""
+
+    results: List[Dict[str, Any]]
+
+
+class TrainResponse(BaseModel):
+    """Training outcome summary."""
+
+    classes: List[str]
+    n_samples: int
+    model: str
+
+
 def _get_or_train() -> TextClassifier:
     global _classifier
     if _classifier is None:
@@ -52,17 +67,28 @@ def _get_or_train() -> TextClassifier:
     return _classifier
 
 
-@router.post("/train", summary="Train the text classifier")
-def train(payload: Optional[TrainRequest] = None) -> dict:
+@router.post("/train", summary="Train the text classifier", response_model=TrainResponse)
+def train(payload: Optional[TrainRequest] = None) -> Dict[str, Any]:
     """Train on supplied data or fall back to the built-in dataset."""
     global _classifier
     if payload is not None and payload.texts:
         if not payload.labels or len(payload.texts) != len(payload.labels):
-            raise ValueError("texts and labels must have the same length")
-        _classifier = TextClassifier(model=payload.model).fit(payload.texts, payload.labels)
+            raise HTTPException(
+                status_code=400,
+                detail="texts and labels must have the same length",
+            )
+        try:
+            _classifier = TextClassifier(model=payload.model).fit(
+                payload.texts, payload.labels
+            )
+        except ValidationError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     else:
         texts, labels = load_ticket()
-        _classifier = TextClassifier(model=payload.model if payload else "logistic").fit(texts, labels)
+        _classifier = TextClassifier(
+            model=payload.model if payload else "logistic"
+        ).fit(texts, labels)
+    logger.info("text classifier trained: %d classes", len(_classifier.labels_))
     return {
         "classes": _classifier.labels_,
         "n_samples": len(_classifier.labels_) * 9,
@@ -70,8 +96,8 @@ def train(payload: Optional[TrainRequest] = None) -> dict:
     }
 
 
-@router.post("/classify", summary="Classify documents")
-def classify(payload: ClassifyRequest) -> dict:
+@router.post("/classify", summary="Classify documents", response_model=ClassifyResponse)
+def classify(payload: ClassifyRequest) -> Dict[str, Any]:
     """Return label, confidence and full score distribution per document."""
     clf = _get_or_train()
     results = clf.predict(payload.texts)

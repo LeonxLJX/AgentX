@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 from agentx.core import get_logger
+from agentx.core.exceptions import SchedulingError, ValidationError
 from agentx.core.schema import Job, ScheduleEntry
 
 logger = get_logger("agentx.scheduler")
@@ -55,7 +56,7 @@ class JobScheduler:
 
     def __init__(self, machines: int = 1) -> None:
         if machines < 1:
-            raise ValueError("machines must be >= 1")
+            raise ValidationError("machines must be >= 1")
         self.machines = machines
 
     # --------------------------------------------------------------- public
@@ -74,20 +75,22 @@ class JobScheduler:
 
         Raises
         ------
-        ValueError
+        SchedulingError
             On duplicate ids or a cyclic dependency graph.
         """
         by_id: Dict[str, Job] = {}
         for job in jobs:
             if job.job_id in by_id:
-                raise ValueError(f"duplicate job_id: {job.job_id}")
+                raise SchedulingError(f"duplicate job_id: {job.job_id}")
             by_id[job.job_id] = job
 
         # Validate dependencies point to existing jobs.
         for job in jobs:
             for dep in job.dependencies:
                 if dep not in by_id:
-                    raise ValueError(f"job '{job.job_id}' depends on unknown '{dep}'")
+                    raise SchedulingError(
+                        f"job '{job.job_id}' depends on unknown '{dep}'"
+                    )
 
         order = self._topological_order(jobs)
         result = self._dispatch(order, by_id)
@@ -123,7 +126,7 @@ class JobScheduler:
 
         if len(order) != len(jobs):
             cyclic = [jid for jid, d in indegree.items() if d > 0]
-            raise ValueError(f"dependency cycle detected among jobs: {cyclic}")
+            raise SchedulingError(f"dependency cycle detected among jobs: {cyclic}")
         return order
 
     def _dispatch(
@@ -153,7 +156,7 @@ class JobScheduler:
                         best_rank = rank
 
             if best is None:
-                raise RuntimeError("scheduling deadlock - inconsistent dependency state")
+                raise SchedulingError("scheduling deadlock - inconsistent dependency state")
 
             # Place on the earliest-free machine (lowest id wins ties).
             machine = int(min(range(self.machines), key=lambda m: (machine_free[m], m)))

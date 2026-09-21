@@ -14,7 +14,7 @@ client provides them.
 
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 from fastapi import APIRouter, HTTPException
@@ -23,6 +23,7 @@ from sklearn.datasets import make_classification
 
 from agentx.calibrator import Calibrator
 from agentx.core import get_logger
+from agentx.core.exceptions import ValidationError
 
 logger = get_logger("agentx.api.calibration")
 router = APIRouter()
@@ -38,8 +39,17 @@ class CalibrateRequest(BaseModel):
 
 
 @router.post("/calibrate", summary="Calibrate a binary model's probabilities")
-def calibrate(payload: CalibrateRequest) -> dict:
-    """Fit a calibrator and report raw vs calibrated scoring metrics."""
+def calibrate(payload: CalibrateRequest) -> Dict[str, Any]:
+    """Fit a calibrator and report raw vs calibrated scoring metrics.
+
+    Raises
+    ------
+    HTTPException
+        400 when the user supplies features without labels (or vice versa),
+        or the row counts differ.
+    ValidationError
+        When the calibrator rejects the configured method.
+    """
     if payload.features is not None or payload.labels is not None:
         if not payload.features or not payload.labels:
             raise HTTPException(400, "features and labels must both be provided")
@@ -61,9 +71,17 @@ def calibrate(payload: CalibrateRequest) -> dict:
         split = int(len(X) * 0.7)
         X, X_eval, y, y_eval = X[:split], X[split:], y[:split], y[split:]
 
-    calibrator = Calibrator(method=payload.method, random_state=7).fit(X, y)
+    try:
+        calibrator = Calibrator(method=payload.method, random_state=7).fit(X, y)
+    except ValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     gain = calibrator.calibration_gain(X_eval, y_eval)
     eval_metrics = calibrator.evaluate(X_eval, y_eval)
+    logger.info(
+        "calibration complete: method=%s gain_brier=%.4f",
+        payload.method,
+        gain.get("brier", {}).get("calibrated", float("nan")),
+    )
     return {
         "method": payload.method,
         "calibration_gain": gain,

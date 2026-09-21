@@ -12,7 +12,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import List, Optional, Sequence
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -49,15 +49,16 @@ class KnapsackRequest(BaseModel):
 
 
 @router.post("/tsp", summary="Solve a travelling salesman problem")
-def solve_tsp(payload: TspRequest) -> dict:
+def solve_tsp(payload: TspRequest) -> Dict[str, Any]:
     """Return the optimized tour (depot at both ends) and its distance."""
     solver = TSP(coords=payload.coords)
     route, distance = solver.solve(start=payload.start)
+    logger.info("tsp solved: %d nodes, distance=%.4f", len(payload.coords), distance)
     return {"route": route, "distance": round(distance, 4), "n_nodes": len(payload.coords)}
 
 
 @router.post("/vrp", summary="Solve a capacitated vehicle routing problem")
-def solve_vrp(payload: VrpRequest) -> dict:
+def solve_vrp(payload: VrpRequest) -> Dict[str, Any]:
     """Return per-vehicle routes with distance and load."""
     if len(payload.demands) != len(payload.coords):
         raise HTTPException(400, "demands and coords must have the same length")
@@ -68,6 +69,12 @@ def solve_vrp(payload: VrpRequest) -> dict:
     )
     routes = solver.solve(depot=0)
     total_distance = sum(r.total_distance for r in routes)
+    logger.info(
+        "vrp solved: %d nodes, %d vehicles, distance=%.4f",
+        len(payload.coords),
+        len(routes),
+        total_distance,
+    )
     return {
         "routes": [asdict(r) for r in routes],
         "total_distance": round(total_distance, 4),
@@ -76,11 +83,17 @@ def solve_vrp(payload: VrpRequest) -> dict:
 
 
 @router.post("/knapsack", summary="Solve a 0/1 knapsack problem")
-def solve_knapsack(payload: KnapsackRequest) -> dict:
+def solve_knapsack(payload: KnapsackRequest) -> Dict[str, Any]:
     """Return optimal (or greedy) value and the chosen item indices."""
     if len(payload.weights) != len(payload.values):
         raise HTTPException(400, "weights and values must have the same length")
     value, items = knapsack(payload.weights, payload.values, payload.capacity, method=payload.method)
+    logger.info(
+        "knapsack solved: %d items, value=%.4f method=%s",
+        len(payload.weights),
+        value,
+        payload.method,
+    )
     return {
         "method": payload.method,
         "value": round(value, 4),

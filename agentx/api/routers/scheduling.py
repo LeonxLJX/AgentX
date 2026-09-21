@@ -11,12 +11,13 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from agentx.core import get_logger
+from agentx.core.exceptions import SchedulingError, ValidationError
 from agentx.core.schema import Job
 from agentx.scheduler import JobScheduler
 
@@ -44,8 +45,13 @@ class ScheduleRequest(BaseModel):
 
 
 @router.post("/schedule", summary="Schedule jobs across parallel machines")
-def schedule(payload: ScheduleRequest) -> dict:
-    """Return timeline, makespan and per-machine utilization."""
+def schedule(payload: ScheduleRequest) -> Dict[str, Any]:
+    """Return timeline, makespan and per-machine utilization.
+
+    The endpoint translates :class:`SchedulingError` /
+    :class:`ValidationError` raised by :class:`JobScheduler` into HTTP 400
+    responses automatically via the registered exception handlers.
+    """
     jobs = [
         Job(
             job_id=j.job_id,
@@ -59,6 +65,12 @@ def schedule(payload: ScheduleRequest) -> dict:
         for j in payload.jobs
     ]
     result = JobScheduler(machines=payload.machines).schedule(jobs)
+    logger.info(
+        "schedule solved: machines=%d jobs=%d makespan=%.2f",
+        payload.machines,
+        len(jobs),
+        result.makespan,
+    )
     return {
         "entries": [asdict(e) for e in result.entries],
         "makespan": result.makespan,

@@ -29,6 +29,7 @@ from sklearn.cluster import KMeans
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 from agentx.core import get_logger
+from agentx.core.exceptions import ModelNotFittedError, NLPError, ValidationError
 from agentx.core.schema import NlpPhase
 
 logger = get_logger("agentx.phasedetect")
@@ -120,7 +121,7 @@ class PhaseDetector:
         top_k: int = 5,
     ) -> None:
         if language not in {"auto", "en", "zh"}:
-            raise ValueError(f"language must be one of auto/en/zh, got {language}")
+            raise ValidationError(f"language must be one of auto/en/zh, got {language}")
         self.language = language
         self.min_keyword_len = min_keyword_len
         self.top_k = top_k
@@ -237,7 +238,7 @@ class PhaseDetector:
         """
         texts = [t for t in texts if t and t.strip()]
         if len(texts) < 2:
-            raise ValueError("fit_topics needs at least 2 non-empty documents")
+            raise NLPError("fit_topics needs at least 2 non-empty documents")
         n_topics = max(1, min(n_topics, len(texts)))
 
         vectorizer = TfidfVectorizer(
@@ -284,7 +285,7 @@ class PhaseDetector:
             Cluster id and its top representative terms.
         """
         if self.topic_model_ is None or self.topic_vectorizer_ is None:
-            raise RuntimeError("call fit_topics() before predict_topic()")
+            raise ModelNotFittedError("call fit_topics() before predict_topic()")
         X = self.topic_vectorizer_.transform([text])
         kmeans = self.topic_model_["kmeans"]
         cid = int(kmeans.predict(X)[0]) if kmeans is not None else 0

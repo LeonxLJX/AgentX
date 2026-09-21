@@ -17,6 +17,7 @@ from typing import List, Optional, Sequence, Tuple
 import numpy as np
 
 from agentx.core import get_logger
+from agentx.core.exceptions import ValidationError
 from agentx.core.schema import Route
 
 logger = get_logger("agentx.optimizer.vrp")
@@ -48,22 +49,24 @@ class CVRP:
         self.demands = np.asarray(demands, dtype=float)
         self.capacity = float(capacity)
         if self.capacity <= 0:
-            raise ValueError("capacity must be positive")
+            raise ValidationError("capacity must be positive")
 
         if coords is None and distance_matrix is None:
-            raise ValueError("provide either coords or distance_matrix")
+            raise ValidationError("provide either coords or distance_matrix")
         if coords is not None and distance_matrix is not None:
-            raise ValueError("provide coords or distance_matrix, not both")
+            raise ValidationError("provide coords or distance_matrix, not both")
 
         if distance_matrix is not None:
             self.dist = np.asarray(distance_matrix, dtype=float)
         else:
             pts = np.asarray(coords, dtype=float)
+            if pts.ndim != 2 or pts.shape[1] != 2:
+                raise ValidationError("coords must be a list of [x, y] pairs")
             delta = pts[:, None, :] - pts[None, :, :]
             self.dist = np.sqrt((delta ** 2).sum(axis=-1))
 
         if self.demands.shape[0] != self.dist.shape[0]:
-            raise ValueError("demands and distance matrix sizes must match")
+            raise ValidationError("demands and distance matrix sizes must match")
 
     # --------------------------------------------------------------- public
     def solve(self, depot: int = 0) -> List[Route]:

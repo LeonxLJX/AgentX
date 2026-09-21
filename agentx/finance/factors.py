@@ -21,16 +21,28 @@ from typing import Tuple
 
 import numpy as np
 
+from agentx.core import get_logger
+from agentx.core.exceptions import ValidationError
 from agentx.finance.timeseries import returns, rolling_volatility, sma, zscore
+
+logger = get_logger("agentx.finance.factors")
+
+
+def _to_array(values: np.ndarray, *, name: str = "prices") -> np.ndarray:
+    arr = np.asarray(values, dtype=float)
+    if arr.ndim != 1:
+        raise ValidationError(f"{name} must be a 1D array, got shape {arr.shape}")
+    return arr
 
 
 def momentum(prices: np.ndarray, lookback: int) -> np.ndarray:
     """Trailing total return over ``lookback`` periods (NaN-aware)."""
-    arr = np.asarray(prices, dtype=float)
+    arr = _to_array(prices)
     out = np.full_like(arr, np.nan)
     if lookback < 1:
-        return out
-    out[lookback:] = arr[lookback:] / arr[:-lookback] - 1.0
+        raise ValidationError(f"lookback must be >= 1, got {lookback}")
+    if lookback < len(arr):
+        out[lookback:] = arr[lookback:] / arr[:-lookback] - 1.0
     return out
 
 
@@ -44,9 +56,11 @@ def rsi(prices: np.ndarray, period: int = 14) -> np.ndarray:
 
     Overbought > 70, oversold < 30 (classic thresholds).
     """
-    arr = np.asarray(prices, dtype=float)
+    arr = _to_array(prices)
     out = np.full_like(arr, np.nan)
-    if period < 1 or len(arr) < period + 1:
+    if period < 1:
+        raise ValidationError(f"period must be >= 1, got {period}")
+    if len(arr) < period + 1:
         return out
     delta = np.diff(arr)
     gains = np.where(delta > 0, delta, 0.0)
@@ -65,7 +79,7 @@ def bollinger_bands(
     prices: np.ndarray, window: int = 20, num_std: float = 2.0
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Bollinger envelope: ``(middle, upper, lower)`` arrays."""
-    arr = np.asarray(prices, dtype=float)
+    arr = _to_array(prices)
     middle = sma(arr, window)
     upper = np.full_like(arr, np.nan)
     lower = np.full_like(arr, np.nan)
@@ -80,7 +94,7 @@ def sharpe_ratio(
     returns_arr: np.ndarray, risk_free: float = 0.0, periods_per_year: int = 252
 ) -> float:
     """Annualized Sharpe ratio of a returns series."""
-    r = np.asarray(returns_arr, dtype=float)
+    r = _to_array(returns_arr, name="returns")
     r = r[~np.isnan(r)]
     if len(r) < 2:
         return float("nan")
@@ -93,7 +107,7 @@ def sharpe_ratio(
 
 def max_drawdown(prices: np.ndarray) -> float:
     """Maximum peak-to-trough drawdown as a positive fraction (0..1)."""
-    arr = np.asarray(prices, dtype=float)
+    arr = _to_array(prices)
     arr = arr[~np.isnan(arr)]
     if len(arr) < 2:
         return 0.0
@@ -109,7 +123,7 @@ def volatility_ratio(
 
     Values > 1 signal rising volatility (stress regime).
     """
-    arr = np.asarray(returns_arr, dtype=float)
+    arr = _to_array(returns_arr, name="returns")
     short_vol = rolling_volatility(arr, short)
     long_vol = rolling_volatility(arr, long)
     out = np.full_like(arr, np.nan)

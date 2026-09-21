@@ -15,27 +15,41 @@ from typing import Tuple
 
 import numpy as np
 
+from agentx.core import get_logger
+from agentx.core.exceptions import ValidationError
+
+logger = get_logger("agentx.finance.timeseries")
+
+
+def _to_array(prices: np.ndarray, *, name: str = "prices") -> np.ndarray:
+    arr = np.asarray(prices, dtype=float)
+    if arr.ndim != 1:
+        raise ValidationError(f"{name} must be a 1D array, got shape {arr.shape}")
+    return arr
+
 
 def returns(prices: np.ndarray) -> np.ndarray:
     """Simple period-over-period returns: ``p[t]/p[t-1] - 1``."""
-    arr = np.asarray(prices, dtype=float)
+    arr = _to_array(prices)
     out = np.full_like(arr, np.nan)
-    out[1:] = arr[1:] / arr[:-1] - 1.0
+    if len(arr) >= 2:
+        out[1:] = arr[1:] / arr[:-1] - 1.0
     return out
 
 
 def log_returns(prices: np.ndarray) -> np.ndarray:
     """Log returns: ``log(p[t]/p[t-1])`` (additive across time)."""
-    arr = np.asarray(prices, dtype=float)
+    arr = _to_array(prices)
     out = np.full_like(arr, np.nan)
     with np.errstate(divide="ignore", invalid="ignore"):
-        out[1:] = np.log(arr[1:] / arr[:-1])
+        if len(arr) >= 2:
+            out[1:] = np.log(arr[1:] / arr[:-1])
     return out
 
 
 def sma(prices: np.ndarray, window: int) -> np.ndarray:
     """Simple moving average (centered alignment preserved via same length)."""
-    arr = np.asarray(prices, dtype=float)
+    arr = _to_array(prices)
     out = np.full_like(arr, np.nan)
     if window < 1 or len(arr) < window:
         return out
@@ -46,7 +60,7 @@ def sma(prices: np.ndarray, window: int) -> np.ndarray:
 
 def ema(prices: np.ndarray, span: int) -> np.ndarray:
     """Exponential moving average (``span``-based smoothing factor)."""
-    arr = np.asarray(prices, dtype=float)
+    arr = _to_array(prices)
     out = np.full_like(arr, np.nan)
     if len(arr) == 0 or span < 1:
         return out
@@ -59,7 +73,7 @@ def ema(prices: np.ndarray, span: int) -> np.ndarray:
 
 def rolling_volatility(returns_arr: np.ndarray, window: int) -> np.ndarray:
     """Rolling sample standard deviation of returns (NaN-aware)."""
-    arr = np.asarray(returns_arr, dtype=float)
+    arr = _to_array(returns_arr, name="returns")
     out = np.full_like(arr, np.nan)
     if window < 2:
         return out
@@ -74,7 +88,7 @@ def ewma_volatility(returns_arr: np.ndarray, span: int = 20) -> np.ndarray:
     ``sigma_t^2 = lambda * sigma_{t-1}^2 + (1-lambda) * r_t^2``
     with ``lambda = 1 - 2/(span+1)``.
     """
-    arr = np.asarray(returns_arr, dtype=float)
+    arr = _to_array(returns_arr, name="returns")
     out = np.full_like(arr, np.nan)
     if len(arr) < 2:
         return out
@@ -89,7 +103,7 @@ def ewma_volatility(returns_arr: np.ndarray, span: int = 20) -> np.ndarray:
 
 def zscore(series: np.ndarray, window: int) -> np.ndarray:
     """Rolling z-score: ``(x - rolling_mean) / rolling_std``."""
-    arr = np.asarray(series, dtype=float)
+    arr = _to_array(series, name="series")
     out = np.full_like(arr, np.nan)
     if window < 2:
         return out
@@ -109,7 +123,7 @@ def linear_trend(series: np.ndarray) -> Tuple[float, float, float]:
     tuple[float, float, float]
         ``(slope, intercept, r_squared)`` over the time index 0..n-1.
     """
-    arr = np.asarray(series, dtype=float)
+    arr = _to_array(series, name="series")
     x = np.arange(len(arr), dtype=float)
     mask = ~np.isnan(arr)
     if mask.sum() < 2:
@@ -125,11 +139,13 @@ def linear_trend(series: np.ndarray) -> Tuple[float, float, float]:
 
 def autocorrelation(series: np.ndarray, lag: int = 1) -> float:
     """Pearson autocorrelation of a series at a given lag (NaN-aware)."""
-    arr = np.asarray(series, dtype=float)
+    arr = _to_array(series, name="series")
+    if lag < 0:
+        raise ValidationError(f"lag must be >= 0, got {lag}")
     if len(arr) <= lag:
         return float("nan")
-    x = arr[:-lag]
-    y = arr[lag:]
+    x = arr[:-lag] if lag > 0 else arr
+    y = arr[lag:] if lag > 0 else arr
     mask = ~(np.isnan(x) | np.isnan(y))
     if mask.sum() < 2:
         return float("nan")

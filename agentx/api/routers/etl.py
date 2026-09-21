@@ -45,7 +45,7 @@ class CleanRequest(BaseModel):
 
 
 @router.post("/clean", summary="Clean tabular data")
-def clean(payload: CleanRequest) -> dict:
+def clean(payload: CleanRequest) -> Dict[str, Any]:
     """Run the cleaning pipeline and return cleaned rows + audit report."""
     df = pd.DataFrame(payload.rows)
     cleaner = DataCleaner(df)
@@ -62,8 +62,15 @@ def clean(payload: CleanRequest) -> dict:
     cleaned = cleaned.apply(
         lambda col: col.map(lambda v: v.isoformat() if hasattr(v, "isoformat") else v)
     )
+    report = cleaner.report()
+    logger.info(
+        "etl clean complete: rows_in=%d rows_out=%d deduped=%d",
+        len(payload.rows),
+        len(cleaned),
+        report.duplicates_removed,
+    )
     return {
-        "report": asdict(cleaner.report()),
+        "report": asdict(report),
         "columns": [str(c) for c in cleaned.columns],
         "rows": cleaned.to_dict(orient="records"),
     }

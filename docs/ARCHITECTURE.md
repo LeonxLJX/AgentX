@@ -27,7 +27,8 @@ design decisions of AgentX, for client review and team maintenance.
                                │
 ┌──────────────────────────────▼──────────────────────────────┐
 │                    Infrastructure layer                      │
-│  core (logging / data models) · NumPy/SciPy/pandas/sklearn  │
+│  core (logging / exceptions / config / data models)         │
+│  · NumPy/SciPy/pandas/sklearn                                │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -40,8 +41,16 @@ design decisions of AgentX, for client review and team maintenance.
 - **Shared data models** (`agentx/core/schema.py`): `ClassificationResult`,
   `NlpPhase`, `ScheduleEntry`, `Route`, `CleanReport`, `ForecastPoint` are
   reused across modules, keeping API response structures stable.
-- **Observability**: all modules log through the unified `get_logger`; the API
-  exposes `/api/health` for Docker health checks.
+- **Typed exceptions** (`agentx/core/exceptions.py`): every module raises a
+  specific `AgentXError` subclass so callers (and the REST layer) can catch
+  failures with the right granularity without inspecting message strings.
+- **Configuration** (`agentx/core/config.py`): a pydantic-settings `Settings`
+  singleton drives feature flags, log format, CORS, metrics and more from
+  environment variables.
+- **Observability**: all modules log through the unified `get_logger`
+  (text or JSON format); the API exposes `/api/health` for Docker health
+  checks and `/api/metrics` for usage telemetry; `RequestLoggingMiddleware`
+  logs every request.
 
 ## 3. Module Design Notes
 
@@ -71,16 +80,40 @@ Client POST /api/text/classify
 
 - **Docker**: multi-stage build (builder installs deps -> slim runtime);
   `HEALTHCHECK` pings `/api/health`; `docker compose up -d` starts everything.
-- **Configuration**: `AGENTX_PORT` env var controls the port (default 8000);
-  `AGENTX_ENV` is reserved for production/dev markers.
+- **Configuration**: `agentx/core/config.py` defines a pydantic-settings
+  `Settings` model loaded from environment variables (or a `.env` file). All
+  knobs are prefixed `AGENTX_*` — supported settings include:
+  - `AGENTX_ENV` (`dev` | `staging` | `prod`)
+  - `AGENTX_LOG_LEVEL` / `AGENTX_LOG_FORMAT` (`text` | `json`)
+  - `AGENTX_HOST` / `AGENTX_PORT` / `AGENTX_CORS_ORIGINS`
+  - `AGENTX_ENABLE_METRICS` / `AGENTX_ENABLE_REQUEST_LOG`
+  - `AGENTX_MODEL_CACHE_SIZE`
+- **Logging**: every module logs through `agentx.core.get_logger`, which
+  configures the root `agentx` logger once. Records can be emitted as plain
+  text (default) or as single-line JSON for log shippers (`AGENTX_LOG_FORMAT=json`).
+- **Observability**:
+  - `GET /api/health` returns `{"status": "ok"|"degraded", "modules": {...}}`
+    with one import probe per algorithm module (used by Docker `HEALTHCHECK`).
+  - `GET /api/metrics` returns per-route request counts, response code
+    distribution and average latency (toggleable via `AGENTX_ENABLE_METRICS`).
+  - `RequestLoggingMiddleware` emits one INFO line per request with method,
+    path, status code and latency (toggleable via `AGENTX_ENABLE_REQUEST_LOG`).
+- **Error handling**: `agentx.core.exceptions` defines a typed exception
+  hierarchy rooted at `AgentXError`. The API registers handlers that map
+  `ValidationError` → HTTP 400, other `AgentXError` subclasses → HTTP 400, and
+  any uncaught `Exception` → HTTP 500 (logged at `error` level with the full
+  traceback). All non-2xx responses share the `ErrorResponse` envelope
+  (`{"error", "detail", "path"}`).
 - **Testing**: `pytest` covers all eight algorithm modules plus API smoke tests
   (`TestClient`); all test data is seeded and reproducible.
 
 ## 6. Extension Guide
 
 - New algorithm module: create a package under `agentx/` -> reuse
-  `core/schema.py` and `core/logging.py` -> add a router in `api/routers/` ->
-  register it in `main.py` -> add `examples/` and `tests/`.
+  `core/schema.py`, `core/logging.py` and `core/exceptions.py` (raise a
+  module-specific `AgentXError` subclass) -> add a router in `api/routers/` ->
+  register it in `main.py` (and append a probe tuple entry in
+  `_MODULE_PROBES`) -> add `examples/` and `tests/`.
 - New model: inject any sklearn estimator into TextClassifier; inject any
   binary classifier into Calibrator.
 - Localization: PhaseDetect lexicons and stop-word tables live at the top of

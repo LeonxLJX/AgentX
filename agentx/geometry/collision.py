@@ -12,10 +12,21 @@ a collision, not just detect it - the pattern game/physics clients expect.
 from __future__ import annotations
 
 import math
-from typing import Optional, Sequence, Tuple
+from typing import List, Optional, Sequence, Tuple
+
+from agentx.core import get_logger
+from agentx.core.exceptions import GeometryError
+
+logger = get_logger("agentx.geometry.collision")
 
 Point = Tuple[float, float]
 Polygon = Sequence[Point]
+
+
+def _validate_polygon(polygon: Polygon, name: str = "polygon") -> None:
+    """Ensure a polygon has enough vertices to form a 2D shape."""
+    if len(polygon) < 3:
+        raise GeometryError(f"{name} must have at least 3 vertices, got {len(polygon)}")
 
 
 def aabb_overlap(
@@ -58,9 +69,9 @@ def point_in_polygon(point: Point, polygon: Polygon) -> bool:
     return inside
 
 
-def _edge_axes(polygon: Polygon):
+def _edge_axes(polygon: Polygon) -> List[Point]:
     """Normalized normals of every polygon edge (candidate SAT axes)."""
-    axes = []
+    axes: List[Point] = []
     n = len(polygon)
     for i in range(n):
         x1, y1 = polygon[i]
@@ -82,17 +93,30 @@ def _project(polygon: Polygon, axis: Point) -> Tuple[float, float]:
 
 def separation_vector(
     poly_a: Polygon, poly_b: Polygon
-) -> Tuple[bool, Optional[Tuple[float, float]]]:
+) -> Tuple[bool, Optional[Point]]:
     """SAT collision test with minimum translation vector.
+
+    Parameters
+    ----------
+    poly_a, poly_b : sequence[(float, float)]
+        Convex polygons (>= 3 vertices each).
 
     Returns
     -------
     (bool, MTV or None)
         ``(True, (dx, dy))`` when the polygons collide, with the minimal
         translation needed to separate them; ``(False, None)`` otherwise.
+
+    Raises
+    ------
+    GeometryError
+        When either polygon has fewer than 3 vertices.
     """
+    _validate_polygon(poly_a, "poly_a")
+    _validate_polygon(poly_b, "poly_b")
+
     best_overlap = float("inf")
-    best_axis: Optional[Tuple[float, float]] = None
+    best_axis: Optional[Point] = None
     for axis in _edge_axes(poly_a) + _edge_axes(poly_b):
         lo_a, hi_a = _project(poly_a, axis)
         lo_b, hi_b = _project(poly_b, axis)
@@ -111,7 +135,12 @@ def separation_vector(
         dx, dy = cx_b - cx_a, cy_b - cy_a
         if dx * best_axis[0] + dy * best_axis[1] < 0:
             best_axis = (-best_axis[0], -best_axis[1])
-        return True, (best_axis[0] * best_overlap, best_axis[1] * best_overlap)
+        mtv: Point = (best_axis[0] * best_overlap, best_axis[1] * best_overlap)
+        logger.debug(
+            "collision detected: overlap=%.4f axis=(%.3f, %.3f)",
+            best_overlap, best_axis[0], best_axis[1],
+        )
+        return True, mtv
     return False, None
 
 

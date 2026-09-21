@@ -23,6 +23,7 @@ from typing import Any, Dict, List, Optional, Sequence
 import numpy as np
 
 from agentx.core import get_logger
+from agentx.core.exceptions import FinanceError, ModelNotFittedError, ValidationError
 from agentx.core.schema import ForecastPoint
 
 logger = get_logger("agentx.finance.models")
@@ -48,7 +49,7 @@ class ForecastModel:
         ridge_alpha: float = 1.0,
     ) -> None:
         if model not in {"linear", "ridge", "ar", "naive"}:
-            raise ValueError("model must be linear/ridge/ar/naive")
+            raise ValidationError("model must be linear/ridge/ar/naive")
         self.model = model
         self.lags = max(1, int(lags))
         self.ridge_alpha = float(ridge_alpha)
@@ -71,9 +72,9 @@ class ForecastModel:
         arr = np.asarray(series, dtype=float)
         arr = arr[~np.isnan(arr)]
         if len(arr) < max(3, self.lags + 1):
-            raise ValueError("series too short for the chosen model")
+            raise FinanceError("series too short for the chosen model")
         if horizon < 1:
-            raise ValueError("horizon must be >= 1")
+            raise ValidationError("horizon must be >= 1")
 
         self.series_ = arr
         self.horizon_ = int(horizon)
@@ -92,7 +93,7 @@ class ForecastModel:
             offsets starting at the end of the history.
         """
         if self.series_ is None:
-            raise RuntimeError("call .fit(series, horizon) before predict()")
+            raise ModelNotFittedError("call .fit(series, horizon) before predict()")
 
         y = self.series_
         h = self.horizon_
@@ -141,7 +142,7 @@ class ForecastModel:
             test_size = max(horizon, int(len(arr) * 0.2))
         test_size = min(int(test_size), len(arr) - self.lags - 1)
         if test_size < 1:
-            raise ValueError("series too short for evaluation")
+            raise FinanceError("series too short for evaluation")
 
         train, test = arr[:-test_size], arr[-test_size:]
         model = ForecastModel(model=self.model, lags=self.lags, ridge_alpha=self.ridge_alpha)
@@ -184,7 +185,7 @@ class ForecastModel:
             train_size = max(min_train, len(arr) - 2 * horizon)
         train_size = int(train_size)
         if train_size < min_train or train_size + horizon > len(arr):
-            raise ValueError("series too short for this backtest configuration")
+            raise FinanceError("series too short for this backtest configuration")
 
         errors = []
         actuals = []
@@ -199,7 +200,7 @@ class ForecastModel:
 
         err = np.concatenate(errors) if errors else np.array([])
         if err.size == 0:
-            raise ValueError("no backtest windows produced")
+            raise FinanceError("no backtest windows produced")
         actual = np.concatenate(actuals)
         denom = np.where(actual != 0, actual, np.nan)
         mape = float(np.nanmean(np.abs(err / denom)) * 100) if np.any(np.isfinite(denom)) else float("nan")

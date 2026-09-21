@@ -17,6 +17,7 @@ from typing import List, Sequence, Tuple
 import numpy as np
 
 from agentx.core import get_logger
+from agentx.core.exceptions import ValidationError
 
 logger = get_logger("agentx.optimizer.knapsack")
 
@@ -39,9 +40,11 @@ def knapsack_dp(
     w = np.asarray(weights, dtype=float)
     v = np.asarray(values, dtype=float)
     if len(w) != len(v):
-        raise ValueError("weights and values must have the same length")
+        raise ValidationError("weights and values must have the same length")
     if capacity < 0:
-        raise ValueError("capacity must be non-negative")
+        raise ValidationError("capacity must be non-negative")
+    if np.any(w < 0):
+        raise ValidationError("weights must be non-negative")
 
     # Scale float weights to integers.
     scale = 1.0
@@ -94,7 +97,9 @@ def knapsack_greedy(
     w = np.asarray(weights, dtype=float)
     v = np.asarray(values, dtype=float)
     if len(w) != len(v):
-        raise ValueError("weights and values must have the same length")
+        raise ValidationError("weights and values must have the same length")
+    if np.any(w < 0):
+        raise ValidationError("weights must be non-negative")
 
     order = sorted(
         range(len(w)),
@@ -130,4 +135,4 @@ def knapsack(
         return knapsack_dp(weights, values, capacity)
     if method == "greedy":
         return knapsack_greedy(weights, values, capacity)
-    raise ValueError("method must be 'dp' or 'greedy'")
+    raise ValidationError("method must be 'dp' or 'greedy'")

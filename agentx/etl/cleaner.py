@@ -25,6 +25,7 @@ import numpy as np
 import pandas as pd
 
 from agentx.core import get_logger
+from agentx.core.exceptions import ValidationError
 from agentx.core.schema import CleanReport
 
 logger = get_logger("agentx.etl.cleaner")
@@ -42,7 +43,7 @@ class DataCleaner:
 
     def __init__(self, df: pd.DataFrame) -> None:
         if not isinstance(df, pd.DataFrame):
-            raise TypeError("DataCleaner expects a pandas.DataFrame")
+            raise ValidationError("DataCleaner expects a pandas.DataFrame")
         self.df = df.copy()
         self._dup_removed = 0
         self._missing_filled: Dict[str, int] = {}
@@ -123,7 +124,7 @@ class DataCleaner:
     def normalize_case(self, cols: Optional[Sequence[str]] = None, case: str = "lower") -> "DataCleaner":
         """Normalize text casing (``lower`` / ``upper`` / ``title``)."""
         if case not in {"lower", "upper", "title"}:
-            raise ValueError("case must be lower/upper/title")
+            raise ValidationError("case must be lower/upper/title")
         targets = list(cols) if cols is not None else list(self.df.columns)
         for col in targets:
             if col in self.df.columns and pd.api.types.is_object_dtype(self.df[col]):
@@ -227,6 +228,6 @@ class DataCleaner:
         if cols is not None:
             missing = [c for c in cols if c not in self.df.columns]
             if missing:
-                raise ValueError(f"unknown columns: {missing}")
+                raise ValidationError(f"unknown columns: {missing}")
             return [c for c in cols if pd.api.types.is_numeric_dtype(self.df[c])]
         return [c for c in self.df.columns if pd.api.types.is_numeric_dtype(self.df[c])]

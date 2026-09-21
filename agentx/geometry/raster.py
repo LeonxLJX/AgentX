@@ -21,6 +21,7 @@ import numpy as np
 from PIL import Image, ImageFilter
 
 from agentx.core import get_logger
+from agentx.core.exceptions import GeometryError, ValidationError
 
 logger = get_logger("agentx.geometry.raster")
 
@@ -48,18 +49,34 @@ class RasterImage:
     # ------------------------------------------------------------ construct
     @classmethod
     def from_file(cls, path: str) -> "RasterImage":
-        """Load an image from disk."""
-        return cls(Image.open(path))
+        """Load an image from disk.
+
+        Raises
+        ------
+        GeometryError
+            When the file cannot be opened.
+        """
+        try:
+            img = Image.open(path)
+        except (OSError, FileNotFoundError) as exc:
+            raise GeometryError(f"cannot open image at {path}: {exc}") from exc
+        return cls(img)
 
     @classmethod
     def from_array(cls, arr: Any) -> "RasterImage":
-        """Build from a NumPy array (HxW or HxWxC, uint8 preferred)."""
+        """Build from a NumPy array (HxW or HxWxC, uint8 preferred).
+
+        Raises
+        ------
+        ValidationError
+            When the array shape is not a supported image layout.
+        """
         array = np.asarray(arr)
         if array.ndim == 2:
             return cls(Image.fromarray(array.astype(np.uint8), mode="L"))
         if array.ndim == 3 and array.shape[2] in (3, 4):
             return cls(Image.fromarray(array.astype(np.uint8)))
-        raise ValueError("array must be HxW or HxWxC (C in {3, 4})")
+        raise ValidationError("array must be HxW or HxWxC (C in {3, 4})")
 
     # ------------------------------------------------------------ accessors
     @property
@@ -158,11 +175,20 @@ class RasterImage:
 
     # ------------------------------------------------------------ output
     def save(self, path: str) -> str:
-        """Write the current image to ``path`` (format inferred from suffix)."""
+        """Write the current image to ``path`` (format inferred from suffix).
+
+        Raises
+        ------
+        GeometryError
+            When the file cannot be written.
+        """
         out_dir = os.path.dirname(os.path.abspath(path))
         if out_dir:
             os.makedirs(out_dir, exist_ok=True)
-        self._img.save(path)
+        try:
+            self._img.save(path)
+        except OSError as exc:
+            raise GeometryError(f"failed to write image to {path}: {exc}") from exc
         logger.info("image saved to %s (size=%s)", path, self.size)
         return path
 

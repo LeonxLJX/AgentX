@@ -17,6 +17,11 @@ from __future__ import annotations
 import math
 from typing import List, Sequence, Tuple
 
+from agentx.core import get_logger
+from agentx.core.exceptions import GeometryError
+
+logger = get_logger("agentx.geometry.convex_hull")
+
 Point = Tuple[float, float]
 
 
@@ -34,12 +39,12 @@ def convex_hull(points: Sequence[Point]) -> List[Point]:
 
     Raises
     ------
-    ValueError
+    GeometryError
         When fewer than 3 distinct points are supplied.
     """
     pts = sorted(set(points))
     if len(pts) < 3:
-        raise ValueError("convex_hull needs at least 3 distinct points")
+        raise GeometryError("convex_hull needs at least 3 distinct points")
 
     lower: List[Point] = []
     for p in pts:
@@ -53,7 +58,9 @@ def convex_hull(points: Sequence[Point]) -> List[Point]:
             upper.pop()
         upper.append(p)
 
-    return lower[:-1] + upper[:-1]
+    hull = lower[:-1] + upper[:-1]
+    logger.debug("convex hull: %d input -> %d vertices", len(points), len(hull))
+    return hull
 
 
 def hull_area(points: Sequence[Point]) -> float:

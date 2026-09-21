@@ -34,6 +34,12 @@ from sklearn.model_selection import cross_val_predict
 
 from agentx.calibrator.metrics import brier_score, log_loss_score, reliability_curve
 from agentx.core import get_logger
+from agentx.core.exceptions import (
+    CalibrationError,
+    ModelNotFittedError,
+    PersistenceError,
+    ValidationError,
+)
 
 logger = get_logger("agentx.calibrator")
 
@@ -69,7 +75,7 @@ class Calibrator:
         random_state: int = 42,
     ) -> None:
         if method not in {"sigmoid", "isotonic"}:
-            raise ValueError("method must be 'sigmoid' or 'isotonic'")
+            raise CalibrationError("method must be 'sigmoid' or 'isotonic'")
         self.base_model = base_model or LogisticRegression(max_iter=2000)
         self.method = method
         self.cv = cv
@@ -86,7 +92,7 @@ class Calibrator:
         """
         y_arr = np.asarray(y)
         if y_arr.ndim != 1 or set(np.unique(y_arr)) - {0, 1}:
-            raise ValueError("Calibrator supports binary labels {0, 1} only")
+            raise ValidationError("Calibrator supports binary labels {0, 1} only")
 
         self.calibrated_ = CalibratedClassifierCV(
             estimator=self.base_model,
@@ -173,17 +179,37 @@ class Calibrator:
 
     # --------------------------------------------------------- persistence
     def save(self, path: str) -> str:
-        """Persist the fitted calibrator as a joblib artifact."""
+        """Persist the fitted calibrator as a joblib artifact.
+
+        Raises
+        ------
+        PersistenceError
+            When the artifact cannot be written.
+        """
         self._require_fitted()
-        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-        joblib.dump({"calibrated": self.calibrated_, "classes": self.classes_}, path)
+        try:
+            os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+            joblib.dump({"calibrated": self.calibrated_, "classes": self.classes_}, path)
+        except OSError as exc:
+            raise PersistenceError(f"failed to write calibrator to {path}: {exc}") from exc
         logger.info("calibrator saved to %s", path)
         return path
 
     @classmethod
     def load(cls, path: str) -> "Calibrator":
-        """Load a calibrator saved with :meth:`save`."""
-        payload = joblib.load(path)
+        """Load a calibrator saved with :meth:`save`.
+
+        Raises
+        ------
+        PersistenceError
+            When the artifact cannot be read or is malformed.
+        """
+        try:
+            payload = joblib.load(path)
+        except (OSError, KeyError, EOFError) as exc:
+            raise PersistenceError(f"failed to load calibrator from {path}: {exc}") from exc
+        if not isinstance(payload, dict) or "calibrated" not in payload:
+            raise PersistenceError(f"malformed calibrator artifact at {path}")
         obj = cls()
         obj.calibrated_ = payload["calibrated"]
         obj.classes_ = payload["classes"]
@@ -193,7 +219,7 @@ class Calibrator:
     # ------------------------------------------------------------- helpers
     def _require_fitted(self) -> CalibratedClassifierCV:
         if self.calibrated_ is None:
-            raise RuntimeError("calibrator is not fitted - call .fit(X, y) first")
+            raise ModelNotFittedError("calibrator is not fitted - call .fit(X, y) first")
         return self.calibrated_
 
     def _init_params_safe(self) -> Dict[str, Any]:

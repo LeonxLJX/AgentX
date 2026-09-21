@@ -11,7 +11,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import List, Optional
+from typing import Any, Dict, List
 
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
@@ -40,7 +40,7 @@ class TopicsRequest(BaseModel):
 
 
 @router.post("/analyze", summary="Detect sentiment / keywords / entities")
-def analyze(payload: AnalyzeRequest) -> dict:
+def analyze(payload: AnalyzeRequest) -> Dict[str, Any]:
     """Full phase-detection pass over a single document."""
     detector = PhaseDetector(language=payload.language)
     result = detector.analyze(payload.text)
@@ -48,7 +48,7 @@ def analyze(payload: AnalyzeRequest) -> dict:
 
 
 @router.post("/topics", summary="Cluster documents into topics")
-def topics(payload: TopicsRequest) -> dict:
+def topics(payload: TopicsRequest) -> Dict[str, Any]:
     """Fit TF-IDF + K-means topics and return per-document assignments."""
     detector = PhaseDetector(language="auto")
     detector.fit_topics(payload.texts, n_topics=payload.n_topics)

@@ -18,6 +18,11 @@ from typing import Dict, List, Tuple
 import numpy as np
 from sklearn.metrics import log_loss
 
+from agentx.core import get_logger
+from agentx.core.exceptions import CalibrationError, ValidationError
+
+logger = get_logger("agentx.calibrator.metrics")
+
 
 def brier_score(y_true: np.ndarray, y_proba: np.ndarray) -> float:
     """Brier score (lower is better): mean of (p - y)^2.
@@ -28,11 +33,16 @@ def brier_score(y_true: np.ndarray, y_proba: np.ndarray) -> float:
         Binary labels (0/1).
     y_proba : array-like
         Predicted probability of the positive class.
+
+    Raises
+    ------
+    ValidationError
+        When ``y_true`` and ``y_proba`` have mismatched shapes.
     """
     yt = np.asarray(y_true, dtype=float).ravel()
     yp = np.asarray(y_proba, dtype=float).ravel()
     if yt.shape != yp.shape:
-        raise ValueError("y_true and y_proba must have the same length")
+        raise ValidationError("y_true and y_proba must have the same length")
     return float(np.mean((yp - yt) ** 2))
 
 
@@ -93,6 +103,11 @@ def plot_reliability(
     -------
     str
         Path of the written PNG file.
+
+    Raises
+    ------
+    CalibrationError
+        When no populated bins are available to plot.
     """
     import matplotlib
 
@@ -101,7 +116,7 @@ def plot_reliability(
 
     curve = reliability_curve(y_true, y_proba, n_bins=n_bins)
     if not curve:
-        raise ValueError("no populated bins - cannot plot reliability")
+        raise CalibrationError("no populated bins - cannot plot reliability")
 
     centers = [r["bin_center"] for r in curve]
     predicted = [r["mean_predicted"] for r in curve]
@@ -124,4 +139,5 @@ def plot_reliability(
     os.makedirs(out_dir, exist_ok=True)
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
+    logger.info("reliability diagram saved to %s (bins=%d)", out_path, len(curve))
     return out_path

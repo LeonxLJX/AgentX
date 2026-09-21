@@ -32,6 +32,12 @@ from sklearn.pipeline import Pipeline
 from sklearn.svm import LinearSVC
 
 from agentx.core import get_logger
+from agentx.core.exceptions import (
+    ModelNotFittedError,
+    PersistenceError,
+    TextClassificationError,
+    ValidationError,
+)
 from agentx.core.schema import ClassificationResult
 
 logger = get_logger("agentx.textclassifier")
@@ -78,7 +84,9 @@ class TextClassifier:
     ) -> None:
         if isinstance(model, str):
             if model not in MODEL_REGISTRY:
-                raise ValueError(f"Unknown model '{model}'. Choose from {list(MODEL_REGISTRY)}.")
+                raise TextClassificationError(
+                    f"Unknown model '{model}'. Choose from {list(MODEL_REGISTRY)}."
+                )
             estimator: Any = MODEL_REGISTRY[model](
                 random_state=random_state, max_iter=2000, class_weight="balanced"
             )
@@ -115,9 +123,9 @@ class TextClassifier:
         texts = list(texts)
         labels = list(labels)
         if len(texts) != len(labels):
-            raise ValueError("texts and labels must have the same length")
+            raise ValidationError("texts and labels must have the same length")
         if not texts:
-            raise ValueError("cannot fit on an empty dataset")
+            raise ValidationError("cannot fit on an empty dataset")
 
         self.labels_ = sorted(set(labels))
         logger.info("fitting on %d samples, %d classes", len(texts), len(self.labels_))
@@ -202,17 +210,37 @@ class TextClassifier:
 
     # --------------------------------------------------------- persistence
     def save(self, path: str) -> str:
-        """Persist the fitted model to disk as a joblib artifact."""
+        """Persist the fitted model to disk as a joblib artifact.
+
+        Raises
+        ------
+        PersistenceError
+            When the artifact cannot be written.
+        """
         self._require_fitted()
-        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-        joblib.dump({"pipeline": self.pipeline_, "labels": self.labels_}, path)
+        try:
+            os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+            joblib.dump({"pipeline": self.pipeline_, "labels": self.labels_}, path)
+        except OSError as exc:
+            raise PersistenceError(f"failed to write model to {path}: {exc}") from exc
         logger.info("model saved to %s", path)
         return path
 
     @classmethod
     def load(cls, path: str) -> "TextClassifier":
-        """Load a model previously saved with :meth:`save`."""
-        payload = joblib.load(path)
+        """Load a model previously saved with :meth:`save`.
+
+        Raises
+        ------
+        PersistenceError
+            When the artifact cannot be read or is malformed.
+        """
+        try:
+            payload = joblib.load(path)
+        except (OSError, KeyError, EOFError) as exc:
+            raise PersistenceError(f"failed to load model from {path}: {exc}") from exc
+        if not isinstance(payload, dict) or "pipeline" not in payload or "labels" not in payload:
+            raise PersistenceError(f"malformed model artifact at {path}")
         obj = cls()
         obj.pipeline_ = payload["pipeline"]
         obj.labels_ = payload["labels"]
@@ -222,7 +250,7 @@ class TextClassifier:
     # ------------------------------------------------------------- helpers
     def _require_fitted(self) -> Pipeline:
         if self.pipeline_ is None:
-            raise RuntimeError("model is not fitted - call .fit(texts, labels) first")
+            raise ModelNotFittedError("model is not fitted - call .fit(texts, labels) first")
         return self.pipeline_
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid

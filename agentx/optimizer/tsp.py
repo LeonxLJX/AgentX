@@ -18,6 +18,7 @@ from typing import List, Optional, Sequence, Tuple
 import numpy as np
 
 from agentx.core import get_logger
+from agentx.core.exceptions import ValidationError
 
 logger = get_logger("agentx.optimizer.tsp")
 
@@ -40,20 +41,24 @@ class TSP:
         distance_matrix: Optional[Sequence[Sequence[float]]] = None,
     ) -> None:
         if coords is None and distance_matrix is None:
-            raise ValueError("provide either coords or distance_matrix")
+            raise ValidationError("provide either coords or distance_matrix")
         if coords is not None and distance_matrix is not None:
-            raise ValueError("provide coords or distance_matrix, not both")
+            raise ValidationError("provide coords or distance_matrix, not both")
 
         if distance_matrix is not None:
             self.dist = np.asarray(distance_matrix, dtype=float)
         else:
             pts = np.asarray(coords, dtype=float)
+            if pts.ndim != 2 or pts.shape[1] != 2:
+                raise ValidationError("coords must be a list of [x, y] pairs")
             delta = pts[:, None, :] - pts[None, :, :]
             self.dist = np.sqrt((delta ** 2).sum(axis=-1))
 
         n = self.dist.shape[0]
         if self.dist.shape != (n, n):
-            raise ValueError("distance_matrix must be square")
+            raise ValidationError("distance_matrix must be square")
+        if n < 1:
+            raise ValidationError("distance_matrix must have at least one node")
         self.n = n
 
     # --------------------------------------------------------------- public
@@ -73,6 +78,8 @@ class TSP:
 
         if start is None:
             start = int(np.argmin(self.dist.sum(axis=1)))
+        if start < 0 or start >= self.n:
+            raise ValidationError(f"start index {start} out of range [0, {self.n})")
         tour = self._nearest_neighbour(int(start))
         if improve:
             tour = self._two_opt(tour)

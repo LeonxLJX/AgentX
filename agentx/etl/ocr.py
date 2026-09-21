@@ -26,6 +26,7 @@ from typing import Any, List, Optional
 import numpy as np
 
 from agentx.core import get_logger
+from agentx.core.exceptions import DependencyError, ETLError, ValidationError
 
 logger = get_logger("agentx.etl.ocr")
 
@@ -77,11 +78,13 @@ class OcrEngine:
 
         Raises
         ------
-        RuntimeError
+        DependencyError
             With installation guidance when OCR is unavailable.
+        ETLError
+            When the source image cannot be parsed.
         """
         if not self.is_available():
-            raise RuntimeError(
+            raise DependencyError(
                 "OCR is not available. Install pytesseract (requirements-optional.txt) "
                 "and the Tesseract binary (see module docstring), then retry."
             )
@@ -101,9 +104,12 @@ class OcrEngine:
         from PIL import Image
 
         if isinstance(source, str):
-            return Image.open(source)
+            try:
+                return Image.open(source)
+            except OSError as exc:
+                raise ETLError(f"cannot open image at {source}: {exc}") from exc
         if isinstance(source, np.ndarray):
             return Image.fromarray(source)
         if hasattr(source, "convert"):  # already a PIL image
             return source
-        raise TypeError("source must be a path, PIL.Image or numpy array")
+        raise ValidationError("source must be a path, PIL.Image or numpy array")

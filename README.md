@@ -33,18 +33,59 @@ frontend and one-command Docker deployment.
 ## Tech Stack
 
 ```
-Python 3.10+     language baseline
-scikit-learn     text classification / calibration / KMeans topic clustering
-NumPy / SciPy    numerics, linear algebra, TSP/VRP distance matrices
-pandas           ETL cleaning and type inference
-Pillow (+OpenCV) image ops (gray / resize / blur / edge detection)
-FastAPI+Uvicorn  REST API with auto Swagger docs
-Pydantic         request/response validation
-matplotlib       reliability diagrams and evaluation charts
-pytesseract(opt) OCR text recognition
-Docker           one-command deployment
-pytest           unit tests across all modules + API smoke tests
+Python 3.10+      language baseline
+scikit-learn      text classification / calibration / KMeans topic clustering
+NumPy / SciPy     numerics, linear algebra, TSP/VRP distance matrices
+pandas            ETL cleaning and type inference
+Pillow (+OpenCV)  image ops (gray / resize / blur / edge detection)
+FastAPI+Uvicorn   REST API with auto Swagger docs
+Pydantic          request/response validation
+pydantic-settings typed configuration via environment variables
+matplotlib        reliability diagrams and evaluation charts
+pytesseract(opt)  OCR text recognition
+Docker            one-command deployment
+pytest            unit tests across all modules + API smoke tests
+ruff              lint + format
+mypy              static type checking
 ```
+
+## Enterprise Features
+
+Beyond the algorithm modules, AgentX ships with the production-grade
+infrastructure an overseas engineering team would expect to maintain:
+
+- **Structured logging** — every module logs through a shared
+  `agentx.core.logging.get_logger` factory. The format is configurable via
+  `AGENTX_LOG_FORMAT` (default `text`; switch to `json` for log shippers like
+  Loki / CloudWatch / Datadog).
+- **Typed exception hierarchy** — `agentx.core.exceptions` defines a base
+  `AgentXError` plus per-module subclasses (`SchedulingError`,
+  `OptimizationError`, `GeometryError`, `ETLError`, `FinanceError`,
+  `CalibrationError`, `NLPError`, `TextClassificationError`,
+  `ModelNotFittedError`, `PersistenceError`, `DependencyError`,
+  `ValidationError`, `ConfigError`). The REST layer maps each one to a
+  consistent JSON error envelope without inspecting message strings.
+- **Configuration management** — `agentx.core.config.Settings` is a
+  pydantic-settings model that reads every knob from environment variables
+  (or a `.env` file). Feature flags include `AGENTX_ENABLE_METRICS`,
+  `AGENTX_ENABLE_REQUEST_LOG`, `AGENTX_LOG_FORMAT`, `AGENTX_CORS_ORIGINS`
+  and more.
+- **Type safety** — public functions across all nine modules carry type
+  annotations; the project is configured for `mypy --strict` with targeted
+  relaxations for optional third-party stubs (`cv2`, `pytesseract`).
+- **API observability** —
+  - `GET /api/health` returns aggregate `ok`/`degraded` status plus per-module
+    import probes (used by Docker healthcheck and load balancers).
+  - `GET /api/metrics` returns per-route request counts, status code
+    distribution and average latency (toggleable via
+    `AGENTX_ENABLE_METRICS`).
+  - `RequestLoggingMiddleware` logs every request with method, path, status
+    and latency (toggleable via `AGENTX_ENABLE_REQUEST_LOG`).
+- **Standardized error responses** — `ErrorResponse` (Pydantic) is the
+  canonical envelope returned for any non-2xx response, with `error`,
+  `detail` and `path` fields. Custom exception handlers translate
+  `ValidationError` → 400, other `AgentXError` subclasses → 400, and any
+  uncaught `Exception` → 500 (logged at `error` level with the full traceback).
 
 ## Quick Start
 
@@ -66,10 +107,29 @@ python examples/demo_finance.py
 # 5. Start the REST API + frontend (http://localhost:8000)
 uvicorn agentx.api.main:app --reload --port 8000
 # Interactive docs: http://localhost:8000/docs
+# Liveness probe:    http://localhost:8000/api/health
+# Usage metrics:     http://localhost:8000/api/metrics
 
 # 6. Docker one-command deployment
 docker compose up -d
 ```
+
+### Configuration
+
+All runtime behavior is controlled via environment variables (or a `.env`
+file at the repo root). A representative `.env`:
+
+```
+AGENTX_ENV=dev
+AGENTX_LOG_LEVEL=INFO
+AGENTX_LOG_FORMAT=text        # or "json" for log shippers
+AGENTX_PORT=8000
+AGENTX_CORS_ORIGINS=*
+AGENTX_ENABLE_METRICS=true
+AGENTX_ENABLE_REQUEST_LOG=true
+```
+
+See `agentx/core/config.py` for the full list of supported settings.
 
 ## Module Details
 
@@ -215,7 +275,11 @@ health check.
 ```
 agentx/
 ├── agentx/
-│   ├── core/                 # unified logging, shared data models
+│   ├── core/                 # shared infrastructure
+│   │   ├── logging.py        # unified structured logging (text + JSON)
+│   │   ├── exceptions.py     # typed exception hierarchy
+│   │   ├── config.py         # pydantic-settings driven configuration
+│   │   └── schema.py         # lightweight shared data models
 │   ├── textclassifier/       # module 1
 │   ├── phasedetect/          # module 2
 │   ├── calibrator/           # module 3 (incl. reliability plotting)
@@ -225,6 +289,8 @@ agentx/
 │   ├── etl/                  # module 7 (cleaner / ocr)
 │   ├── finance/              # module 8 (timeseries / factors / models)
 │   └── api/                  # module 9 (FastAPI + frontend)
+│       ├── main.py           # app factory, health/metrics, middleware
+│       └── routers/          # one router per module
 ├── examples/                 # one runnable example per module
 ├── tests/                    # unit tests + API smoke tests
 ├── tools/                    # static import checker (no deps)

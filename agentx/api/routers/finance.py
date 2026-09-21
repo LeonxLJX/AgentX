@@ -10,7 +10,7 @@
 
 from __future__ import annotations
 
-from typing import List
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -47,7 +47,7 @@ class FactorsRequest(BaseModel):
 
 
 @router.post("/forecast", summary="Forecast a time series")
-def forecast(payload: ForecastRequest) -> dict:
+def forecast(payload: ForecastRequest) -> Dict[str, Any]:
     """Return the forecast points plus in-sample evaluation metrics."""
     if len(payload.prices) < max(10, payload.lags + 3):
         raise HTTPException(400, "series too short for the requested lags")
@@ -55,6 +55,12 @@ def forecast(payload: ForecastRequest) -> dict:
     model.fit(payload.prices, horizon=payload.horizon)
     points = [p.__dict__ for p in model.predict()]
     metrics = model.evaluate(payload.prices, horizon=payload.horizon)
+    logger.info(
+        "forecast complete: model=%s horizon=%d n=%d",
+        payload.model,
+        payload.horizon,
+        len(payload.prices),
+    )
     return {
         "model": payload.model,
         "horizon": payload.horizon,
@@ -64,11 +70,12 @@ def forecast(payload: ForecastRequest) -> dict:
 
 
 @router.post("/factors", summary="Compute technical factors")
-def factors(payload: FactorsRequest) -> dict:
+def factors(payload: FactorsRequest) -> Dict[str, Any]:
     """Return a snapshot of classic factors at the series tail."""
     prices = payload.prices
     rets = returns(prices)
     middle, upper, lower = bollinger_bands(prices)
+    logger.info("factors computed: n=%d", len(prices))
     return {
         "last_price": prices[-1],
         "sma_20": round(float(middle[-1]), 4),
